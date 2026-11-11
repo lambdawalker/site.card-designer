@@ -22,23 +22,43 @@ try {
       [137, 80, 78, 71, 13, 10, 26, 10],
       design.id,
     );
-    const pixels = await page.evaluate(async png => {
+    const pixels = await page.evaluate(async (png) => {
       const image = new Image();
-      image.src = URL.createObjectURL(new Blob([new Uint8Array(png)], {type: "image/png"}));
+      image.src = URL.createObjectURL(
+        new Blob([new Uint8Array(png)], { type: "image/png" }),
+      );
       await image.decode();
+      URL.revokeObjectURL(image.src);
       const canvas = document.createElement("canvas");
-      canvas.width = image.width; canvas.height = image.height;
-      const ctx = canvas.getContext("2d"); ctx.drawImage(image, 0, 0);
-      const data = ctx.getImageData(0,0,image.width,image.height).data;
-      let opaque = 0; const colors = new Set();
-      for(let i=0;i<data.length;i+=4) {if(data[i+3]) opaque++; colors.add(Array.from(data.slice(i,i+4)).join(","));}
-      return {width:image.width,height:image.height,opaque,colors:colors.size};
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(image, 0, 0);
+      const data = ctx.getImageData(0, 0, image.width, image.height).data;
+      let opaque = 0;
+      const colors = new Set();
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3]) opaque++;
+        colors.add(Array.from(data.slice(i, i + 4)).join(","));
+      }
+      return {
+        width: image.width,
+        height: image.height,
+        opaque,
+        colors: colors.size,
+      };
     }, rendered.png);
     console.log(design.id, rendered.png.length, pixels);
-    assert.ok(pixels.opaque > pixels.width * pixels.height / 2, design.id + " is mostly transparent");
+    assert.ok(
+      pixels.opaque > (pixels.width * pixels.height) / 2,
+      design.id + " is mostly transparent",
+    );
     assert.ok(pixels.colors > 20, design.id + " has no rendered content");
     assert.ok(rendered.png.length > 5000, design.id);
-    assert.ok(!rendered.html.includes("NaN"), design.id);
+    // Embedded PNG/SVG base64 may legitimately contain the letters "NaN".
+    // Validate rendered markup/CSS, not the opaque image payloads.
+    const markup = rendered.html.replace(/data:[^"'()\s<>]+/g, "[embedded]");
+    assert.ok(!markup.includes("NaN"), design.id);
   }
   await page.goto(origin);
   await page.getByRole("button", { name: "Sign in", exact: true }).waitFor();
