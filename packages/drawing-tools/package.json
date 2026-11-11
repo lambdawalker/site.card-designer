@@ -1,0 +1,22 @@
+{
+  "name": "@lambdawalker/drawing-tools",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node test/render.mjs"
+  },
+  "dependencies": {
+    "hsluv": "^1.0.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0",
+    "typescript": "^5.9.3"
+  }
+}

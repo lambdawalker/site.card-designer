@@ -1,0 +1,57 @@
+name: Verify card designer
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [backend, deploy, infra]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+      - name: Tests and vet
+        working-directory: ${{ matrix.module }}
+        run: |
+          go test -race ./...
+          go vet ./...
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            packages/drawing-tools/package-lock.json
+      - name: Drawing tools
+        working-directory: packages/drawing-tools
+        run: |
+          npm ci
+          npm run check
+          npm test
+      - name: Designer build and unit tests
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Browser sample downloads
+        working-directory: web
+        run: |
+          npx playwright install --with-deps chromium
+          npx vite preview --host 127.0.0.1 --port 5173 > /tmp/card-designer-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5173/renderer.html >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:browser
