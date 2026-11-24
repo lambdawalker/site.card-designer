@@ -1,0 +1,8 @@
+.deploy/
+node_modules/
+web/dist/
+backend/bootstrap
+backend/bootstrap.zip
+infra/Pulumi.*.yaml
+!infra/Pulumi.yaml
+*.exe

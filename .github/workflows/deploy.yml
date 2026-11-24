@@ -1,0 +1,63 @@
+name: Deploy card designer
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected environment
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      action:
+        description: Operation
+        type: choice
+        options: [preview, deploy]
+        default: preview
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: card-designer-${{ inputs.environment }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      DEPLOY_PROJECT: ${{ vars.DEPLOY_PROJECT }}
+      DEPLOY_STATE: ${{ vars.DEPLOY_STATE }}
+      AWS_ACCOUNT: ${{ vars.AWS_ACCOUNT }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version: '1.24.9'
+          cache-dependency-path: |
+            backend/go.sum
+            deploy/go.sum
+            infra/go.sum
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - name: Validate configuration
+        shell: bash
+        run: |
+          for key in AWS_REGION AWS_ROLE_ARN AWS_ACCOUNT DEPLOY_PROJECT DEPLOY_STATE PULUMI_CONFIG_PASSPHRASE; do
+            test -n "${!key}" || { echo "Missing $key"; exit 1; }
+          done
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: pulumi/actions@v6
+      - name: Preview or deploy
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+          CERTIFICATE: ${{ vars.DEPLOY_CERTIFICATE_ARN }}
+          ZONE: ${{ vars.DEPLOY_ZONE_ID }}
+        run: ./deploy.sh "$ACTION" --noninteractive --yes --project "$DEPLOY_PROJECT" --environment "$ENVIRONMENT" --account "$AWS_ACCOUNT" --region "$AWS_REGION" --state "$DEPLOY_STATE" --domain "$DOMAIN" --certificate-arn "$CERTIFICATE" --zone-id "$ZONE"

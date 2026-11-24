@@ -1,0 +1,3 @@
+name: card-designer
+runtime: go
+description: Private standalone card designer
