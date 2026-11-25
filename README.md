@@ -35,9 +35,12 @@ On Windows:
 deploy.bat
 ```
 
-Both launchers run the same Go deployment program. The wizard collects the domain
+Both launchers run the same pinned Infra Composer deployment CLI, with a small
+local adapter for asset preparation and legacy record migration. The wizard collects the domain
 at deployment time and keeps settings scoped to the selected project/environment.
-Build and preview precede apply. AWS credentials belong to the operator's SSO
+Build and refreshed preview precede saved-plan approval and apply.
+Use `./deploy.sh --server` for the shared browser wizard, or
+`./deploy.sh --action build` to build without cloud access. AWS credentials belong to the operator's SSO
 profile locally and an assumed OIDC role in CI. Never commit credentials, the
 local vault or Pulumi state.
 

@@ -1,25 +1,192 @@
-# Deployment (development)
+# Deployment with Infra Composer
 
-Requires Go 1.24.9+, Node 24/npm, AWS CLI v2, Pulumi CLI v3, and an AWS IAM Identity Center profile (`aws configure sso`). No resources have been deployed or live AWS checks performed during implementation.
+The root launchers delegate to the exact `go.infra.composer/deploycli` version in
+`deploy/go.mod`. `deploy.json` declares this website's inputs, artifacts, stack
+identity, readiness check and resource purposes. Composer owns the terminal and
+browser wizards, SSO, encrypted vault, state handling, saved-plan approvals,
+GitHub configuration, and JSON/Markdown/HTML artifact reports.
 
-Run from any directory: `./deploy.sh preview` (Windows: `deploy.bat preview`). A plain interactive invocation defaults to deploy: build, successful refreshed preview, then a visible five-second default-yes approval. Enter accepts; n, Escape, Ctrl+C or input failure cancels. Any typed answer stops the timer. Explicit preview/build/setup/status never applies. CI requires explicit `deploy --noninteractive --yes` and complete inputs.
+The small `deploy/` adapter handles old flag aliases and offline record migration.
+`deploy/cmd/assets` installs the drawing tools and website dependencies, builds
+Svelte, and copies the shared template catalog into the backend. It has no AWS
+or approval logic. The CLI builds and caches the Linux/ARM64 Lambda archive.
 
-First setup asks project, environment, optional hostname, SSO profile and region; STS discovers account and role. Saved values skip repeated questions. Settings are authoritative under `~/.infra-composer/<project>/<environment>/settings.json`; repository `.deploy/identity.json` selects project and `.deploy/<environment>/vault.json` stores the Pulumi passphrase using scrypt + AES-256-GCM, bound to project/environment/account/region. Unlock passwords are never saved. Back up both settings and vault, plus the vault unlock password separately. Wrong passwords and scope mismatches fail without rewriting the vault. No AWS credentials are stored in it. Explicit flags override saved settings; explicit empty domain selects the generated hostname.
+## Run
 
-State is `s3://bucket/dedicated-project-prefix`; Pulumi manages multiple objects, not a manually edited state file. On first interactive setup, default No to “Do you have an S3 bucket for deployment state?” creates a unique private versioned AES256 encrypted TLS-only bucket. CI never bootstraps. Existing state is ownership/region/security checked; inaccessible state is never replaced. Bootstrap saves its location before creation; interrupted hardening requires an operator to finish bucket settings and rerun. State encryption at rest, Pulumi secret encryption and local vault encryption are separate controls. AWS IAM protects all state, which may contain sensitive nonsecret fields.
+Install Go 1.25+, Node **24**/npm, AWS CLI v2 and Pulumi CLI v3. Configure an AWS
+IAM Identity Center profile with `aws configure sso`. Use GitHub CLI when setting
+up Actions. Both launchers resolve the checkout from any working directory:
 
-The only application component is the designer; there is no admin/index component. Each environment owns API Gateway HTTP API, Lambda arm64, private versioned data/cache and web S3 buckets, DynamoDB tokens and owner-index, Cognito public PKCE code client/hosted login, and CloudFront OAC. Lambda can access only users/* and cache/* in its data bucket, its token table/index and its log group. Backend authorizes all API routes; CloudFront disables API caching and forwards bearer authorization and queries. Runtime environment: DATA_BUCKET, TOKEN_TABLE, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, COGNITO_DOMAIN, REDIRECT_URI, LOGOUT_URI; AWS_REGION is provided by Lambda. HF_TOKEN is optional and not provisioned by this tool.
+```sh
+./deploy.sh --help
+./deploy.sh --action build
+./deploy.sh --action preview --environment dev
+./deploy.sh --server
+./deploy.sh --terminal
+```
 
-Build copies assets/catalog.json to the embedded backend catalog, installs packages/drawing-tools dependencies and builds web, compiles Linux arm64 bootstrap and creates a deterministic-mode ZIP. Infrastructure publishes web/dist via Pulumi. A versioned content fingerprint includes source/dependencies/build recipe and Go/Node versions; unchanged runs reuse artifacts only after checking their SHA-256 contents. Pulumi still refreshes/previews remote resources. CLI checks prerequisite executables and rejects non-SSO local profiles; automatic tool installation is not performed.
+On Windows, replace `./deploy.sh` with `deploy.bat`. Plain terminal invocation
+runs the shared deployment flow; plain browser invocation opens its action menu
+with Preview selected. Eligible routine defaults use Composer's 15-second timer;
+a complete browser settings form uses 30 seconds. Editing pauses the timer.
+Passwords, browser account/apply decisions, and destructive changes require
+explicit input. CI has no countdown and requires `--action deploy --approve`.
+Build, setup, preview, status and report do not apply the application stack.
+Setup can authorize state-bucket creation and GitHub setup independently.
 
-For a custom domain, obtain and DNS-validate an ACM certificate in us-east-1 first, then provide `--domain cards.example.com --certificate-arn arn:aws:acm:us-east-1:ACCOUNT:certificate/ID`. Supply `--zone-id ZONE` to manage an A alias in your existing Route53 zone, or create a manual CNAME to the output CloudFront hostname. External zone/certificate ownership remains with the operator. Wait for certificate ISSUED and DNS propagation before acceptance. No custom domain uses the generated CloudFront URL.
+The single target is the website plus its API. There is no separate admin/index
+or discovery stack. `dev`, `qa`, `prod` and validated custom environments are
+supported. Production support is explicitly enabled in this application's
+manifest; isolated Composer test hosts retain their production restriction.
 
-Recovery: rerun the same command after fixing the error. `./deploy.sh recover --project NAME --environment dev` selects existing state and prints safe outputs; it never initializes missing stacks. Existing stack config is restored via `pulumi config refresh --force` before changes. Missing previously initialized stacks stop; restore S3 versioned state or use Pulumi's documented recovery with a backup. Never delete Pulumi locks until another operator confirms the writer is stopped. `status`/`report` print stack outputs, and preview/deploy attempts write private JSON/Markdown/HTML command-result reports under .deploy/reports. They do not assert live inventory. `export` writes allowlisted nonsecret settings; import and encrypted vault migration are intentionally manual and require scope validation/re-encryption.
+## Hostname and ownership
 
-GitHub Actions: create protected dev/qa/prod environments with reviewers/branch restrictions, an AWS OIDC provider and deployment role trusted only for `repo:OWNER/REPO:environment:ENV`. Restrict the audience to sts.amazonaws.com. Role permissions must cover Pulumi-owned resources and the dedicated S3 state prefix; bootstrap bucket administration is unnecessary in CI. Configure variables AWS_REGION, AWS_ROLE_ARN, AWS_ACCOUNT, DEPLOY_PROJECT, DEPLOY_STATE and optional DEPLOY_DOMAIN, DEPLOY_CERTIFICATE_ARN, DEPLOY_ZONE_ID; secret PULUMI_CONFIG_PASSPHRASE. Run the manual workflow's preview first, review it, then deploy. The Action calls the same Go program, uses OIDC and environment concurrency, and never uploads vault/state artifacts. Automatic GitHub/OIDC environment reconciliation is not implemented; this is an honest manual setup requirement, not a completed setup claim.
+Supply the **full website hostname**, for example `cards.example.com`; it is not
+a base domain from which this application invents another hostname. Use `none`
+for the generated CloudFront URL. The manifest's labeled fields are available in
+both wizard interfaces:
 
-Known remaining gaps against the full deployment-wizard specification: automated GitHub environment/OIDC reconciliation and secret rotation receipts; detailed resource inventory/evidence protocol reports; mock cloud and fake-clock confirmation suites; automatic certificate issuance/DNS conflict discovery; explicit vault migration tooling and full interactive fake-terminal suites. Review infrastructure preview carefully and retain the built-in protection on data bucket/token table/Cognito pool before applying. This implementation must not be presented as production-validated.
+| Flag | Value |
+| --- | --- |
+| `--domain` | Full hostname or `none` |
+| `--certificatearn` | Existing ISSUED ACM certificate in us-east-1 in the deployment account, or `none` |
+| `--zoneid` | Existing public Route53 hosted zone ID, or `none` for manual DNS |
 
-Verify: `(cd deploy && go test ./...)`, `(cd infra && go test ./...)`; live acceptance after authorized deploy: open site, sign in/out, save/reload a private design, second-user isolation, read-only PAT access/revocation, dataset immutable package caching, HTTPS/DNS, private buckets, and API errors remain JSON.
+A custom hostname requires its certificate. The operator owns certificate
+issuance/validation and the existing public DNS zone. With manual DNS, point the
+hostname to the stack's CloudFront domain before expecting readiness. Pulumi
+validates input structure before registering any resources; AWS verifies the
+certificate and zone at deployment. No certificate or zone is silently created.
 
-State verification parses encryption algorithm and exact deny/TLS bucket+object policy semantics, checks public access/versioning, account ownership and region. Reconfigure deliberately accepts a new account/region/domain rather than silently merging those targets, while keeping saved state location for explicit recovery. After apply a bounded GET /api/config must succeed before reporting ready.
+Existing resource logical names and protections are preserved. The Pulumi
+project remains `card-designer`; stacks remain `<project>-<environment>`.
+The new `deploymentIdentity` output verifies the selected project/environment.
+The Lambda reads Composer's `archive` config; the legacy archive path remains a
+fallback for existing direct Pulumi users. CamelCase `certificateArn`/`zoneId`
+and `project`/`environment` remain readable when the new keys are absent.
+Explicit `none` clears an old hostname/certificate/zone value.
+
+## Builds and approval
+
+Composer runs the asset builder before Lambda compilation. `dist/deploy/` holds
+the Lambda ZIP and private build receipts. The fingerprint includes frontend and
+drawing source, lockfiles, catalog, builder, Go dependencies/toolchain and
+Node/npm versions. Cached files are reused only when their content digests match.
+Use `--force-rebuild` to rebuild both outputs or `--action clean-cache` to clear
+receipts. Each deployment still obtains a refreshed Pulumi preview.
+
+The approval binds the saved plan, Lambda archive, source/configuration and
+prepared website artifacts. A changed or missing file stops apply and requires a
+fresh preview. Non-destructive terminal plans use the shared approval timer;
+browser apply is explicit. Replacements/deletions require typed review and are
+rejected by noninteractive deployment. Protected data, tokens and user pool
+resources retain their existing protection settings.
+
+After apply, `GET <siteUrl>/api/config` must return 200 within the bounded readiness
+probe. Failure is reported as applied with readiness failed; it does not pretend
+to roll back the stack or establish end-to-end acceptance. `--action status`
+reads allowlisted outputs; `--action report` produces scoped artifact evidence,
+and `--refresh-report` requests supported read-only verification.
+
+## Saved records and recovery
+
+Composer owns authoritative versioned records under
+`~/.infra-composer/<project>/environments/<environment>/`. Repository `.deploy/`
+contains checkout identity, local settings, encrypted credentials and private
+reports. Both it and `dist/` are ignored. Explicit arguments override compatible
+saved settings; account/region/state changes require a deliberate separate scope.
+Do not copy/rename Composer vaults to another checkout: their encryption is bound
+to their path. Preserve the state bucket/prefix, project, environment and original
+Pulumi passphrase. S3 encryption, Pulumi secrets encryption and the local vault
+are different controls; IAM must protect all state contents.
+
+Existing settings from the previous Card Designer wizard need one offline
+conversion, while no deployment process is running:
+
+```sh
+./deploy.sh migrate
+./deploy.sh --action preview --environment dev --adopt-legacy-stack
+```
+
+The converter reads the original `.deploy/identity.json` and central
+`~/.infra-composer/<project>/<environment>/settings.json` records. Back up these
+and `.deploy/<environment>/vault.json` first. On a fresh checkout, restore those
+original records before conversion. It validates all environments before writing,
+preserves project/account/region/state URL, copies site inputs and existing stack
+initialization receipts, and leaves every original record/vault intact. It refuses
+incomplete or conflicting records. Identical partial writes are safe to retry.
+It neither contacts AWS nor claims a successful cloud migration.
+
+On first Composer unlock, choose its local vault password and provide the
+**original Pulumi passphrase**. The converter does not decrypt or relabel the old
+vault. Keep the original vault and its unlock password as recovery material; if
+the Pulumi passphrase is only available inside it, recover it through the old
+wizard before continuing. Never substitute a new stack passphrase. The first
+preview of an existing stack needs deliberate `--adopt-legacy-stack` review
+because old state has no `deploymentIdentity` output. Verify the target and
+preview, then deploy with the same review flag; successful apply records the
+identity for subsequent runs. A missing initialized stack stops for recovery.
+
+After interruption, rerun the same command after fixing the reported problem.
+Do not delete locks until the previous writer is confirmed stopped. Restore
+missing state through S3 version history/Pulumi recovery, not stack recreation.
+The old revision and untouched original records are rollback material before
+apply. After apply, review a fresh preview before changing tooling versions; cloud
+changes are not transactional rollback. Back up new central records, local vault
+and their passwords as well as the S3 state location.
+
+The adapter accepts the previous positional actions and aliases: `preview`,
+`deploy`, `build`, `status`, `recover` (status), `reconfigure` (setup with
+reconfiguration), `--state`, `--noninteractive`, `--yes`, `--certificate-arn` and
+`--zone-id`. New scripts should use the shared flags. Use
+`--export-settings PATH` / `--import-settings PATH` for Composer's allowlisted
+nonsecret interchange; legacy vaults are never imported as settings.
+
+## GitHub Actions
+
+`deploy.yml` calls the same launcher and pinned CLI, with protected environments
+named `dev`, `qa`, and `prod`, OIDC and serialized environment deployments. The
+wizard offers GitHub setup; skip it for local-only deployment, or run:
+
+```sh
+./deploy.sh --action github-setup --environment dev --github-role arn:aws:iam::ACCOUNT:role/EXISTING_DEPLOY_ROLE
+```
+
+This consumer uses the **existing role/provider** integration. The operator must
+create/review the OIDC provider and a least-privilege deployment role first. Its
+trust must constrain audience to `sts.amazonaws.com` and subject to
+`repo:lambdawalker/site.card-designer:environment:dev` (matching the environment).
+The role needs only this stack's resources and its dedicated state prefix. The
+wizard reconciles managed environment settings after explicit authorization,
+preserving unrelated settings and protections. This manifest does not claim
+automatic IAM role/policy creation. Never store AWS access keys or SSO tokens.
+
+| Environment variable/secret | Content |
+| --- | --- |
+| `BENCH_PROJECT`, `BENCH_ACCOUNT`, `BENCH_REGION` | Exact deployment identity |
+| `BENCH_BACKEND` | Existing S3 state URL with dedicated prefix |
+| `BENCH_ROLE_ARN` | Reviewed OIDC deployment role |
+| `BENCH_ENVIRONMENT` | Matching environment, reconciled by Composer |
+| `BENCH_DOMAIN`, `BENCH_CERTIFICATE_ARN`, `BENCH_ZONE_ID` | Explicit reviewed site settings; use `none` when inapplicable |
+| `PULUMI_CONFIG_PASSPHRASE` (secret) | Original stack passphrase |
+
+`BENCH_` names are the shared CLI protocol, even for this website. Reconcile
+existing Actions settings before using the migrated workflow; old `DEPLOY_*`
+variables are not silently substituted. Require reviewers/branch restrictions for
+sensitive environments. Run manual Preview first, inspect its report, then select
+Deploy. The workflow validates mandatory inputs and passes approval only for
+Deploy; it uploads no vault or raw state. No workflow was dispatched for this
+migration. Existing stacks must finish interactive identity adoption first.
+
+## Verification and remaining acceptance
+
+Run the Go tests/vet in `backend`, `deploy`, `infra`; build from the normal launcher;
+run a second build to verify cache reuse. CI tests both POSIX and Windows launchers
+from a different working directory and runs the existing browser rendering suite.
+The migration tests cover preserved scopes/vaults, conflicting/incomplete records
+and retry. Pulumi mocks check authentication, private storage and API contracts.
+
+Live AWS acceptance is separate and has not been performed: verify HTTPS/DNS,
+Cognito sign-in/out, two-user design isolation, save/reload, browser sample download,
+read-only token access/revocation, portrait package caching, bucket privacy and JSON
+API errors. See the [requirement matrix](../docs/deployment/composer-migration.md).

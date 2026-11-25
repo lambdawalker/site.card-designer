@@ -8,7 +8,10 @@ docs/plans/extraction.md before changing subsystem contracts.
 - `assets/`: built-in template catalog used by the web client and API.
 - `backend/`: Go API, Cognito/PAT authentication, private designs and HF cache.
 - `infra/`: Pulumi-owned AWS infrastructure.
-- `deploy/`: shared Go deployment program used by both root launchers.
+- `deploy/`: pinned Infra Composer CLI, launcher compatibility/migration adapter,
+  and application asset builder. `deploy.json` owns the declarative contract.
+  Reusable deployment workflow changes belong upstream in `go.infra.composer`;
+  do not restore a private wizard here.
 
 Preserve ownership boundaries: user identifiers come from verified authentication,
 never request bodies. Personal tokens are read-only, hashed at rest, expiring and

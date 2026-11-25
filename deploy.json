@@ -1,0 +1,148 @@
+{
+  "Version": 1,
+  "Title": "APEXFISSION / CARD DESIGNER",
+  "Description": "Standalone card designer website and API",
+  "Repository": "lambdawalker/site.card-designer",
+  "Feature": "card-designer",
+  "DefaultProject": "card-designer",
+  "PulumiProject": "card-designer",
+  "PulumiDir": "infra",
+  "StackPrefix": "{project}-",
+  "BucketPrefix": "card-designer-state",
+  "BuildWorkingDir": "backend",
+  "BuildPackage": "./cmd/lambda",
+  "BuildDir": "dist/deploy",
+  "AllowProduction": true,
+  "StackIdentity": true,
+  "PrepareBuild": {
+    "Directory": "deploy",
+    "Package": "./cmd/assets",
+    "Inputs": [
+      "assets",
+      "web",
+      "packages",
+      "deploy"
+    ],
+    "Outputs": [
+      "web/dist",
+      "backend/internal/catalog/catalog.json"
+    ],
+    "Tools": [
+      "node",
+      "npm"
+    ]
+  },
+  "Outputs": [
+    "siteUrl",
+    "distributionId",
+    "dataBucket",
+    "tokenTable",
+    "cognitoClientId",
+    "deploymentIdentity"
+  ],
+  "InputsFile": "designer.json",
+  "Functions": {
+    "optionalSetting": {
+      "Parameters": {
+        "Value": "text"
+      },
+      "Result": "text",
+      "Template": "{{.Value}}"
+    }
+  },
+  "Inputs": [
+    {
+      "Name": "Domain",
+      "Label": "Website hostname",
+      "Help": "Enter a full hostname, such as cards.example.com, or none for the generated CloudFront URL.",
+      "Kind": "text",
+      "GitHubVariable": "BENCH_DOMAIN",
+      "Compose": {
+        "Function": "optionalSetting",
+        "DefaultInput": "none",
+        "UseLegacyValueAsInput": true,
+        "Parameters": {
+          "Value": {
+            "Source": "userInput"
+          }
+        }
+      }
+    },
+    {
+      "Name": "CertificateARN",
+      "Label": "CloudFront ACM certificate ARN",
+      "Help": "Use an ISSUED us-east-1 certificate for the hostname, or none with the generated URL.",
+      "Kind": "text",
+      "GitHubVariable": "BENCH_CERTIFICATE_ARN",
+      "Compose": {
+        "Function": "optionalSetting",
+        "DefaultInput": "none",
+        "UseLegacyValueAsInput": true,
+        "Parameters": {
+          "Value": {
+            "Source": "userInput"
+          }
+        }
+      }
+    },
+    {
+      "Name": "ZoneID",
+      "Label": "Route53 hosted zone ID",
+      "Help": "Use your existing public zone ID, or none to manage DNS yourself.",
+      "Kind": "text",
+      "GitHubVariable": "BENCH_ZONE_ID",
+      "Compose": {
+        "Function": "optionalSetting",
+        "DefaultInput": "none",
+        "UseLegacyValueAsInput": true,
+        "Parameters": {
+          "Value": {
+            "Source": "userInput"
+          }
+        }
+      }
+    }
+  ],
+  "HealthCheck": {
+    "APIURL": "siteUrl",
+    "ProbeMethod": "GET",
+    "ProbePath": "/api/config",
+    "ProbeStatus": 200
+  },
+  "GitHub": {
+    "Workflow": "deploy.yml",
+    "EnvironmentPrefix": "",
+    "Prompt": true
+  },
+  "ArtifactDescriptions": {
+    "web": "Stores the website files behind CloudFront origin access control.",
+    "data": "Stores private user designs and immutable portrait package cache.",
+    "tokens": "Stores hashed expiring and revocable read-only personal API tokens.",
+    "users": "Authenticates registered card designer users.",
+    "login": "Provides the Cognito hosted sign-in domain.",
+    "api": "Routes browser and renderer requests to the Go API.",
+    "web-access": "Allows only the CloudFront distribution to read website objects.",
+    "worker-sandbox": "Limits template worker capabilities with a Content Security Policy.",
+    "site": "Serves the website and API over HTTPS.",
+    "browser": "Provides the public Cognito PKCE authorization code client.",
+    "api-role": "Provides a dedicated execution identity for the API Lambda.",
+    "api-logs": "Retains API execution logs for 30 days.",
+    "api-permissions": "Limits Lambda access to its data paths, tokens and logs.",
+    "handler": "Runs the authenticated card designer API.",
+    "lambda": "Connects the HTTP API to the Lambda handler.",
+    "api-routes": "Routes API paths to the Lambda integration.",
+    "live": "Publishes the default API stage.",
+    "gateway": "Allows API Gateway to invoke the API Lambda.",
+    "web-policy": "Restricts website object reads to CloudFront and requires TLS.",
+    "data-tls": "Requires TLS for the private data bucket.",
+    "site-dns": "Points the custom website hostname to CloudFront.",
+    "web-private": "Blocks public access for the web bucket.",
+    "web-encryption": "Enables encryption at rest for the web bucket.",
+    "web-versions": "Enables versioned recovery for the web bucket.",
+    "data-private": "Blocks public access for the data bucket.",
+    "data-encryption": "Enables encryption at rest for the data bucket.",
+    "data-versions": "Enables versioned recovery for the data bucket."
+  },
+  "BindDeploymentInputs": true,
+  "RefreshBeforePreview": true
+}
