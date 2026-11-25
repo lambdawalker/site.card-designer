@@ -32,6 +32,8 @@ github.com/lambdawalker/go.infra.composer/deploycli v0.0.0-20261125150724-f00ded
 github.com/lambdawalker/go.infra.composer/deploycli v0.0.0-20261125150724-f00ded86d0a2/go.mod h1:5D05I3JT0A0JiJ/oi5WnkE/jZYMaN1s0HU5nJZaPEdg=
 github.com/lambdawalker/go.infra.composer/deploycli v0.0.0-20261125174757-dbd51131eb17 h1:mtzOoLHSmUAYF+jjQz5ND5SOnw7/AuQT/3y4tBY+kKU=
 github.com/lambdawalker/go.infra.composer/deploycli v0.0.0-20261125174757-dbd51131eb17/go.mod h1:5D05I3JT0A0JiJ/oi5WnkE/jZYMaN1s0HU5nJZaPEdg=
+github.com/lambdawalker/go.infra.composer/deploycli v0.0.0-20261125181113-32d1abf8d9b0 h1:VFHBnmKct3KZCn7sqEz4wKe27ZeR4busyk66Qnl2oio=
+github.com/lambdawalker/go.infra.composer/deploycli v0.0.0-20261125181113-32d1abf8d9b0/go.mod h1:5D05I3JT0A0JiJ/oi5WnkE/jZYMaN1s0HU5nJZaPEdg=
 golang.org/x/sys v0.36.0 h1:KVRy2GtZBrk1cBYA7MKu5bEZFxQk4NIDV6RLVcC8o0k=
 golang.org/x/sys v0.36.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=

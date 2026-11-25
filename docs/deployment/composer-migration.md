@@ -23,7 +23,7 @@ Requirement/evidence matrix is completed with the implementation below.
 ## Implementation and evidence
 
 The shared extension is [Composer PR #50](https://github.com/lambdawalker/go.infra.composer/pull/50).
-The consumer pins commit `dbd51131eb1763a884215e53783e1881c90829f9`
+The consumer pins commit `32d1abf8d9b0220b72fcf4bc388999156f427fcf`
 through the checksummed Go pseudo-version in `deploy/go.mod`. This is a reviewed
 commit dependency, not a claimed stable release. Merge the shared prerequisite
 before the consumer; no merge/deployment is included in implementation delivery.
@@ -59,3 +59,9 @@ Verified locally on 2026-11-25:
 The website build retains its existing large-chunk advisory. No application UI
 logic changed. Live provisioned/configured/accepted status remains **unknown**;
 AWS preview/apply, GitHub environment mutation and live acceptance were **not run**.
+
+Compatibility follow-up: Card Designer explicitly opts into `BindDeploymentInputs`
+and `RefreshBeforePreview`. Existing email/OCR manifests retain their original
+defaults. Both real consumer Lambda builds and cache reuse passed with the
+candidate CLI; core and Pulumi modules are unchanged. See Composer
+`deploycli/docs/consumer-compatibility.md` for inspected revisions and limits.

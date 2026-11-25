@@ -142,5 +142,7 @@
     "data-private": "Blocks public access for the data bucket.",
     "data-encryption": "Enables encryption at rest for the data bucket.",
     "data-versions": "Enables versioned recovery for the data bucket."
-  }
+  },
+  "BindDeploymentInputs": true,
+  "RefreshBeforePreview": true
 }
