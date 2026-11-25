@@ -24,8 +24,14 @@ import (
 func main() { pulumi.Run(run) }
 func run(ctx *pulumi.Context) error {
 	c := config.New(ctx, "")
-	project := c.Require("project")
-	env := c.Require("environment")
+	project := c.Get("deploymentProject")
+	if project == "" {
+		project = c.Require("project")
+	}
+	env := c.Get("deploymentEnvironment")
+	if env == "" {
+		env = c.Require("environment")
+	}
 	name := project + "-" + env
 	if len(project) > 35 || len(name) > 50 {
 		return fmt.Errorf("project must be at most 35 characters and project-environment at most 50 characters")
@@ -39,9 +45,16 @@ func run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	domain := c.Get("domain")
-	cert := c.Get("certificateArn")
-	zone := c.Get("zoneId")
+	domain := optionalSetting(c.Get("domain"))
+	cert := configSetting(c, "certificatearn", "certificateArn")
+	zone := configSetting(c, "zoneid", "zoneId")
+	if err := validateSiteSettings(domain, cert, zone, identity.AccountId); err != nil {
+		return err
+	}
+	archive := c.Get("archive")
+	if archive == "" {
+		archive = "../backend/bootstrap.zip"
+	}
 	if domain != "" && cert == "" {
 		return fmt.Errorf("domain requires an ISSUED ACM certificate ARN in us-east-1; validate it before preview")
 	}
@@ -125,7 +138,7 @@ func run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	fn, err := lambda.NewFunction(ctx, "handler", &lambda.FunctionArgs{Name: pulumi.String(name), Role: role.Arn, Runtime: pulumi.String("provided.al2023"), Handler: pulumi.String("bootstrap"), Architectures: pulumi.StringArray{pulumi.String("arm64")}, Code: pulumi.NewFileArchive("../backend/bootstrap.zip"), MemorySize: pulumi.Int(1024), Timeout: pulumi.Int(30), Environment: &lambda.FunctionEnvironmentArgs{Variables: pulumi.StringMap{"DATA_BUCKET": data.Bucket, "TOKEN_TABLE": table.Name, "COGNITO_USER_POOL_ID": pool.ID(), "COGNITO_CLIENT_ID": client.ID(), "COGNITO_DOMAIN": pulumi.Sprintf("https://%s.auth.%s.amazoncognito.com", hosted.Domain, region.Name), "REDIRECT_URI": pulumi.Sprintf("%s/", site), "LOGOUT_URI": pulumi.Sprintf("%s/", site)}}, Tags: tags}, pulumi.DependsOn([]pulumi.Resource{rp, logs}))
+	fn, err := lambda.NewFunction(ctx, "handler", &lambda.FunctionArgs{Name: pulumi.String(name), Role: role.Arn, Runtime: pulumi.String("provided.al2023"), Handler: pulumi.String("bootstrap"), Architectures: pulumi.StringArray{pulumi.String("arm64")}, Code: pulumi.NewFileArchive(archive), MemorySize: pulumi.Int(1024), Timeout: pulumi.Int(30), Environment: &lambda.FunctionEnvironmentArgs{Variables: pulumi.StringMap{"DATA_BUCKET": data.Bucket, "TOKEN_TABLE": table.Name, "COGNITO_USER_POOL_ID": pool.ID(), "COGNITO_CLIENT_ID": client.ID(), "COGNITO_DOMAIN": pulumi.Sprintf("https://%s.auth.%s.amazoncognito.com", hosted.Domain, region.Name), "REDIRECT_URI": pulumi.Sprintf("%s/", site), "LOGOUT_URI": pulumi.Sprintf("%s/", site)}}, Tags: tags}, pulumi.DependsOn([]pulumi.Resource{rp, logs}))
 	if err != nil {
 		return err
 	}
@@ -190,6 +203,7 @@ func run(ctx *pulumi.Context) error {
 	}).(pulumi.StringOutput)}); err != nil {
 		return err
 	}
+	ctx.Export("deploymentIdentity", pulumi.String(name))
 	ctx.Export("siteUrl", site)
 	ctx.Export("distributionId", dist.ID())
 	ctx.Export("dataBucket", data.Bucket)

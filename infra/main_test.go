@@ -37,12 +37,12 @@ func (m *cloudMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 }
 func TestInfrastructureAuthAndCacheContracts(t *testing.T) {
 	dir := t.TempDir()
-	for _, p := range []string{"infra", "backend", "web/dist"} {
+	for _, p := range []string{"infra", "backend", "web/dist", "dist/deploy"} {
 		if e := os.MkdirAll(filepath.Join(dir, p), 0700); e != nil {
 			t.Fatal(e)
 		}
 	}
-	f, e := os.Create(filepath.Join(dir, "backend/bootstrap.zip"))
+	f, e := os.Create(filepath.Join(dir, "dist/deploy/lambda.zip"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -55,7 +55,7 @@ func TestInfrastructureAuthAndCacheContracts(t *testing.T) {
 	t.Chdir(filepath.Join(dir, "infra"))
 	m := &cloudMocks{inputs: map[string]resource.PropertyMap{}}
 	e = pulumi.RunErr(run, pulumi.WithMocks("card-designer", "test", m), func(i *pulumi.RunInfo) {
-		i.Config = map[string]string{"card-designer:project": "designer", "card-designer:environment": "test"}
+		i.Config = map[string]string{"card-designer:deploymentProject": "designer", "card-designer:deploymentEnvironment": "test", "card-designer:archive": "../dist/deploy/lambda.zip", "card-designer:domain": "none", "card-designer:certificatearn": "none", "card-designer:zoneid": "none"}
 	})
 	if e != nil {
 		t.Fatal(e)

@@ -55,3 +55,36 @@ jobs:
             sleep 1
           done
           npm run test:browser
+
+  deployment-entrypoints:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: deploy/go.mod
+          cache-dependency-path: deploy/go.sum
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - name: POSIX launcher and deployment build
+        if: runner.os != 'Windows'
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/deploy.sh" --help
+          "$GITHUB_WORKSPACE/deploy.sh" --action build
+          "$GITHUB_WORKSPACE/deploy.sh" --action build
+      - name: Windows launcher and deployment build
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          cd /d "%RUNNER_TEMP%"
+          call "%GITHUB_WORKSPACE%\deploy.bat" --help
+          if errorlevel 1 exit /b 1
+          call "%GITHUB_WORKSPACE%\deploy.bat" --action build
+          if errorlevel 1 exit /b 1
+          call "%GITHUB_WORKSPACE%\deploy.bat" --action build
+          if errorlevel 1 exit /b 1

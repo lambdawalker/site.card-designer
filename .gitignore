@@ -6,3 +6,5 @@ backend/bootstrap.zip
 infra/Pulumi.*.yaml
 !infra/Pulumi.yaml
 *.exe
+
+dist/

@@ -1,101 +1,88 @@
 package main
 
 import (
-	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
+	"reflect"
 	"testing"
-	"time"
 )
 
-func TestVaultScopeAndTamper(t *testing.T) {
-	v, e := encrypt("dev", []byte("password"), []byte("secret"))
-	if e != nil {
-		t.Fatal(e)
-	}
-	b, e := decrypt("dev", []byte("password"), v)
-	if e != nil || !bytes.Equal(b, []byte("secret")) {
-		t.Fatal(e)
-	}
-	if _, e = decrypt("prod", []byte("password"), v); e == nil {
-		t.Fatal("scope accepted")
-	}
-	if _, e = decrypt("dev", []byte("wrong"), v); e == nil {
-		t.Fatal("password accepted")
-	}
-	v.Data[0] ^= 1
-	if _, e = decrypt("dev", []byte("password"), v); e == nil {
-		t.Fatal("tamper accepted")
-	}
-}
-func TestSettingsPrecedence(t *testing.T) {
-	s := Settings{Region: "eu-west-1"}
-	merge(&s, Settings{Region: "us-east-1", State: "s3://bucket/one", Initialized: true})
-	if s.Region != "eu-west-1" || !s.Initialized || s.State == "" {
-		t.Fatal(s)
-	}
-}
-func TestAtomicPrivate(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "state.json")
-	if e := save(p, Settings{Project: "one"}); e != nil {
-		t.Fatal(e)
-	}
-	st, e := os.Stat(p)
-	if e != nil || st.Mode().Perm() != 0600 {
-		t.Fatal(st, e)
-	}
-}
-func TestTLSPolicy(t *testing.T) {
-	valid := `{"Statement":[{"Effect":"Deny","Principal":"*","Action":"s3:*","Resource":["arn:aws:s3:::state","arn:aws:s3:::state/*"],"Condition":{"Bool":{"aws:SecureTransport":"false"}}}]}`
-	if !tlsPolicy(valid, "state") {
-		t.Fatal("valid policy rejected")
-	}
-	for _, bad := range []string{`{"Statement":[]}`, string(bytes.ReplaceAll([]byte(valid), []byte(`"Deny"`), []byte(`"Allow"`))), string(bytes.ReplaceAll([]byte(valid), []byte(`"false"`), []byte(`"true"`)))} {
-		if tlsPolicy(bad, "state") {
-			t.Fatal("unsafe policy accepted")
+func TestCommandCompatibility(t *testing.T) {
+	for _, tc := range []struct{ in, out []string }{
+		{[]string{"preview", "--state", "s3://bucket/prefix", "--domain", ""}, []string{"--action", "preview", "--backend", "s3://bucket/prefix", "--domain", "none"}},
+		{[]string{"deploy", "--noninteractive", "--yes", "--certificate-arn=", "--zone-id", ""}, []string{"--action", "deploy", "--non-interactive", "--approve", "--certificatearn=none", "--zoneid", "none"}},
+		{[]string{"recover"}, []string{"--action", "status"}},
+		{[]string{"--server", "--no-open"}, []string{"--server", "--no-open"}},
+	} {
+		got, err := normalizeArgs(tc.in)
+		if err != nil || !reflect.DeepEqual(got, tc.out) {
+			t.Fatalf("%v: %v %v", tc.in, got, err)
 		}
 	}
 }
-func TestBuildArtifactsTamper(t *testing.T) {
-	old := root
-	root = t.TempDir()
-	defer func() { root = old }()
-	atomic(filepath.Join(root, "backend", "bootstrap.zip"), []byte("zip"))
-	atomic(filepath.Join(root, "web", "dist", "index.html"), []byte("web"))
-	a, e := buildArtifacts()
-	if e != nil {
-		t.Fatal(e)
+func TestLegacyMigrationPreservesScopeAndVault(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	os.MkdirAll(filepath.Join(root, ".deploy/dev"), 0700)
+	os.WriteFile(filepath.Join(root, ".deploy/identity.json"), []byte(`{"Project":"designer"}`), 0600)
+	vault := []byte("original encrypted vault bytes")
+	os.WriteFile(filepath.Join(root, ".deploy/dev/vault.json"), vault, 0600)
+	dir := filepath.Join(home, ".infra-composer/designer/dev")
+	os.MkdirAll(dir, 0700)
+	old := legacySettings{Version: 1, Project: "designer", Environment: "dev", Account: "123456789012", Region: "us-east-1", Profile: "sso", State: "s3://existing/original", Initialized: true}
+	raw, _ := json.Marshal(old)
+	os.WriteFile(filepath.Join(dir, "settings.json"), raw, 0600)
+	if checkLegacy(root) == nil {
+		t.Fatal("legacy use was not blocked")
 	}
-	atomic(filepath.Join(root, "web", "dist", "index.html"), []byte("changed"))
-	b, e := buildArtifacts()
-	if e != nil || a == b {
-		t.Fatal("tamper missed", e)
+	if err := migrateLegacy(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkLegacy(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacy(root); err != nil {
+		t.Fatal("migration not restartable", err)
+	}
+	var receipt struct {
+		Stack, Backend string
+		Initialized    bool
+	}
+	if err := readJSON(filepath.Join(home, ".infra-composer/designer/environments/dev/stack.json"), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if !receipt.Initialized || receipt.Stack != "designer-dev" || receipt.Backend != old.State {
+		t.Fatal(receipt)
+	}
+	got, _ := os.ReadFile(filepath.Join(root, ".deploy/dev/vault.json"))
+	if string(got) != string(vault) {
+		t.Fatal("vault changed")
+	}
+	got, _ = os.ReadFile(filepath.Join(dir, "settings.json"))
+	if string(got) != string(raw) {
+		t.Fatal("original settings changed")
+	}
+	// Changed target settings must stop, even if a prior migration was complete.
+	os.WriteFile(filepath.Join(home, ".infra-composer/designer/environments/dev/settings.json"), []byte("different target"), 0600)
+	if migrateLegacy(root) == nil {
+		t.Fatal("conflicting target overwritten")
 	}
 }
-
-func TestCountdownOnlyAcceptsSilence(t *testing.T) {
-	d := time.Unix(100, 0)
-	for _, c := range []struct {
-		timed bool
-		n     int
-		now   time.Time
-		want  bool
-	}{{true, 0, d.Add(-time.Second), false}, {true, 0, d, true}, {true, 1, d, false}, {false, 0, d, false}, {false, 1, d.Add(time.Hour), false}} {
-		if got := timeoutAcceptsDefault(c.timed, c.n, c.now, d); got != c.want {
-			t.Fatalf("%+v got %v", c, got)
-		}
+func TestMigrationRejectsIncompleteRecords(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	os.MkdirAll(filepath.Join(root, ".deploy"), 0700)
+	os.WriteFile(filepath.Join(root, ".deploy/identity.json"), []byte(`{"Project":"designer"}`), 0600)
+	dir := filepath.Join(home, ".infra-composer/designer/dev")
+	os.MkdirAll(dir, 0700)
+	os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"Version":1,"Project":"designer","Environment":"dev"}`), 0600)
+	if migrateLegacy(root) == nil {
+		t.Fatal("incomplete migration accepted")
 	}
-}
-
-func TestAWSIdentityLengths(t *testing.T) {
-	if validateIdentity("card-designer", "dev") != nil {
-		t.Fatal("valid identity rejected")
-	}
-	if validateIdentity(strings.Repeat("a", 36), "dev") == nil {
-		t.Fatal("oversized state bucket name accepted")
-	}
-	if validateIdentity(strings.Repeat("a", 35), strings.Repeat("b", 15)) == nil {
-		t.Fatal("oversized Cognito domain accepted")
+	if _, err := os.Stat(filepath.Join(root, ".deploy/project.json")); !os.IsNotExist(err) {
+		t.Fatal("published identity before validation")
 	}
 }

@@ -23,17 +23,17 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-      DEPLOY_PROJECT: ${{ vars.DEPLOY_PROJECT }}
-      DEPLOY_STATE: ${{ vars.DEPLOY_STATE }}
-      AWS_ACCOUNT: ${{ vars.AWS_ACCOUNT }}
+      AWS_REGION: ${{ vars.BENCH_REGION }}
+      AWS_ROLE_ARN: ${{ vars.BENCH_ROLE_ARN }}
+      DEPLOY_PROJECT: ${{ vars.BENCH_PROJECT }}
+      DEPLOY_STATE: ${{ vars.BENCH_BACKEND }}
+      AWS_ACCOUNT: ${{ vars.BENCH_ACCOUNT }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7.0.0
         with:
-          go-version: '1.24.9'
+          go-version-file: deploy/go.mod
           cache-dependency-path: |
             backend/go.sum
             deploy/go.sum
@@ -49,15 +49,21 @@ jobs:
           done
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.BENCH_ROLE_ARN }}
+          aws-region: ${{ vars.BENCH_REGION }}
       - uses: pulumi/actions@v6
       - name: Preview or deploy
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
           ENVIRONMENT: ${{ inputs.environment }}
-          DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
-          CERTIFICATE: ${{ vars.DEPLOY_CERTIFICATE_ARN }}
-          ZONE: ${{ vars.DEPLOY_ZONE_ID }}
-        run: ./deploy.sh "$ACTION" --noninteractive --yes --project "$DEPLOY_PROJECT" --environment "$ENVIRONMENT" --account "$AWS_ACCOUNT" --region "$AWS_REGION" --state "$DEPLOY_STATE" --domain "$DOMAIN" --certificate-arn "$CERTIFICATE" --zone-id "$ZONE"
+          DOMAIN: ${{ vars.BENCH_DOMAIN }}
+          CERTIFICATE: ${{ vars.BENCH_CERTIFICATE_ARN }}
+          ZONE: ${{ vars.BENCH_ZONE_ID }}
+        run: |
+          for key in DOMAIN CERTIFICATE ZONE; do
+            test -n "${!key}" || { echo "Missing $key; use explicit none when inapplicable"; exit 1; }
+          done
+          approval=()
+          if [[ "$ACTION" == deploy ]]; then approval+=(--approve); fi
+          ./deploy.sh --action "$ACTION" --non-interactive "${approval[@]}" --project "$DEPLOY_PROJECT" --environment "$ENVIRONMENT" --account "$AWS_ACCOUNT" --region "$AWS_REGION" --backend "$DEPLOY_STATE" --domain "$DOMAIN" --certificatearn "$CERTIFICATE" --zoneid "$ZONE"
