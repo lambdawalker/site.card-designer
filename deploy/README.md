@@ -29,6 +29,10 @@ On Windows, replace `./deploy.sh` with `deploy.bat`. Plain terminal invocation
 runs the shared deployment flow; plain browser invocation opens its action menu
 with Preview selected. Eligible routine defaults use Composer's 15-second timer;
 a complete browser settings form uses 30 seconds. Editing pauses the timer.
+On first browser launch, choose and confirm a new local vault password in the
+website. If a local or legacy vault already exists, the website asks you to unlock
+it instead. A mismatch or cancellation creates no vault. The separate Pulumi
+stack passphrase is requested later; existing stacks require their original value.
 Passwords, browser account/apply decisions, and destructive changes require
 explicit input. CI has no countdown and requires `--action deploy --approve`.
 Build, setup, preview, status and report do not apply the application stack.
