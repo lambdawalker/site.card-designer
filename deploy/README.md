@@ -81,13 +81,29 @@ both wizard interfaces:
 
 | Flag | Value |
 | --- | --- |
+| `--dnsprovider` | `route53` or `cloudflare`; selected explicitly on first setup and saved per environment |
 | `--domain` | Full hostname or `none` |
 | `--certificatearn` | Existing ISSUED ACM certificate in us-east-1 in the deployment account, or `none` |
-| `--zoneid` | Existing public Route53 hosted zone ID, or `none` for manual DNS |
+| `--zoneid` | Existing zone ID for the selected provider: Route 53 `Z...` or Cloudflare 32-character hexadecimal ID; `none` for manual DNS |
 
 A custom hostname requires its certificate. The operator owns certificate
-issuance/validation and the existing public DNS zone. With manual DNS, point the
-hostname to the stack's CloudFront domain before expecting readiness. Pulumi
+issuance/validation and the existing public DNS zone. First-time browser setup
+shows **Public DNS provider** with **AWS Route 53** and **Cloudflare** choices;
+the terminal offers the same choices. Select the provider serving your domain,
+even if you registered it elsewhere. Route 53 creates the existing `site-dns`
+alias; Cloudflare creates a DNS-only CNAME pointing at CloudFront. CloudFront
+continues to handle HTTPS in either case.
+
+For Cloudflare-managed DNS, enter a zone-scoped API token with DNS write access
+in the browser's **Credentials** panel. Composer stores it in the encrypted local
+vault and passes it to Pulumi. Terminal and CI runs can supply
+`CLOUDFLARE_API_TOKEN` through the environment. Never put the token in `deploy.json`
+or a command-line argument. Selecting Cloudflare does not require a token when
+using manual DNS (`--zoneid none`) or the generated URL (`--domain none` and
+certificate/zone `none`); no DNS resource is created in those cases.
+
+With manual DNS, point the hostname to the stack's CloudFront domain before
+expecting readiness. Pulumi
 validates input structure before registering any resources; AWS verifies the
 certificate and zone at deployment. No certificate or zone is silently created.
 
@@ -98,6 +114,11 @@ The Lambda reads Composer's `archive` config; the legacy archive path remains a
 fallback for existing direct Pulumi users. CamelCase `certificateArn`/`zoneId`
 and `project`/`environment` remain readable when the new keys are absent.
 Explicit `none` clears an old hostname/certificate/zone value.
+Older direct Pulumi configurations without `dnsprovider` retain Route 53.
+Existing Composer environments without a saved DNS provider ask you to select it
+on the next setup. Keep Route 53 and the existing zone to preserve that record.
+Switching providers on an existing deployment changes the managed DNS resource;
+review the delete/create plan and DNS delegation before applying.
 
 ## Builds and approval
 
@@ -201,7 +222,13 @@ automatic IAM role/policy creation. Never store AWS access keys or SSO tokens.
 | `BENCH_ROLE_ARN` | Reviewed OIDC deployment role |
 | `BENCH_ENVIRONMENT` | Matching environment, reconciled by Composer |
 | `BENCH_DOMAIN`, `BENCH_CERTIFICATE_ARN`, `BENCH_ZONE_ID` | Explicit reviewed site settings; use `none` when inapplicable |
+| `BENCH_DNS_PROVIDER` | `route53` or `cloudflare`; reconciled from the wizard's choice. Existing Actions environments without this variable keep Route 53 |
+| `CLOUDFLARE_API_TOKEN` (secret) | Zone-scoped DNS token, required for Cloudflare-managed records |
 | `PULUMI_CONFIG_PASSPHRASE` (secret) | Original stack passphrase |
+
+For Cloudflare, add the token as a secret in the protected GitHub environment;
+the local vault does not upload provider credentials to GitHub. The workflow
+checks the token before running Pulumi when Cloudflare-managed DNS is selected.
 
 `BENCH_` names are the shared CLI protocol, even for this website. Reconcile
 existing Actions settings before using the migrated workflow; old `DEPLOY_*`

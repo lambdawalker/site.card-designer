@@ -36,8 +36,9 @@ deploy.bat
 ```
 
 Both launchers run the same pinned Infra Composer deployment CLI, with a small
-local adapter for asset preparation and legacy record migration. The wizard collects the domain
-at deployment time and keeps settings scoped to the selected project/environment.
+local adapter for asset preparation and legacy record migration. First-time setup
+offers AWS Route 53 or Cloudflare for DNS, collects the hostname and existing zone
+ID, and keeps settings scoped to the selected project/environment.
 Build and refreshed preview precede saved-plan approval and apply.
 Use `./deploy.sh --server` for the shared browser workspace with environment tabs,
 deployment history, drift checks and the interactive 3D resource topology, or

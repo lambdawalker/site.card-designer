@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"regexp"
 	"strings"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
 
 func optionalSetting(value string) string {
@@ -22,7 +23,19 @@ func configSetting(c *config.Config, key, legacy string) string {
 	}
 	return optionalSetting(value)
 }
-func validateSiteSettings(domain, cert, zone, account string) error {
+
+// Missing provider config preserves deployments created before the DNS selector.
+func dnsProvider(value string) string {
+	if value == "" {
+		return "route53"
+	}
+	return value
+}
+
+func validateSiteSettings(domain, cert, zone, account, provider string) error {
+	if provider != "route53" && provider != "cloudflare" {
+		return fmt.Errorf("DNS provider must be route53 or cloudflare")
+	}
 	if domain == "" {
 		if cert != "" || zone != "" {
 			return fmt.Errorf("certificate and zone require a website hostname")
@@ -41,8 +54,13 @@ func validateSiteSettings(domain, cert, zone, account string) error {
 	if !regexp.MustCompile(`^arn:aws:acm:us-east-1:` + regexp.QuoteMeta(account) + `:certificate/[A-Za-z0-9-]+$`).MatchString(cert) {
 		return fmt.Errorf("custom hostname requires an ISSUED us-east-1 ACM certificate in the deployment account")
 	}
-	if zone != "" && !regexp.MustCompile(`^Z[A-Z0-9]+$`).MatchString(zone) {
-		return fmt.Errorf("invalid Route53 zone ID")
+	if zone != "" {
+		if provider == "route53" && !regexp.MustCompile(`^Z[A-Z0-9]+$`).MatchString(zone) {
+			return fmt.Errorf("invalid Route53 zone ID")
+		}
+		if provider == "cloudflare" && !regexp.MustCompile(`^[a-fA-F0-9]{32}$`).MatchString(zone) {
+			return fmt.Errorf("invalid Cloudflare zone ID: expected 32 hexadecimal characters")
+		}
 	}
 	return nil
 }

@@ -52,6 +52,13 @@
   },
   "Inputs": [
     {
+      "Name": "DNSProvider",
+      "Label": "Public DNS provider",
+      "Help": "Choose AWS Route 53 or Cloudflare for your website's DNS. With the generated CloudFront URL, no DNS records are created.",
+      "Kind": "dnsProvider",
+      "GitHubVariable": "BENCH_DNS_PROVIDER"
+    },
+    {
       "Name": "Domain",
       "Label": "Website hostname",
       "Help": "Enter a full hostname, such as cards.example.com, or none for the generated CloudFront URL.",
@@ -87,8 +94,8 @@
     },
     {
       "Name": "ZoneID",
-      "Label": "Route53 hosted zone ID",
-      "Help": "Use your existing public zone ID, or none to manage DNS yourself.",
+      "Label": "DNS zone ID",
+      "Help": "Use the selected provider's existing zone ID (Route 53: Z..., Cloudflare: 32 hexadecimal characters), or none for manual DNS. Cloudflare-managed records also need a Cloudflare API token in Credentials.",
       "Kind": "text",
       "GitHubVariable": "BENCH_ZONE_ID",
       "Compose": {

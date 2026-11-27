@@ -17,6 +17,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/lambda"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/route53"
 	"github.com/pulumi/pulumi-aws/sdk/v6/go/aws/s3"
+	"github.com/pulumi/pulumi-cloudflare/sdk/v6/go/cloudflare"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
@@ -48,7 +49,8 @@ func run(ctx *pulumi.Context) error {
 	domain := optionalSetting(c.Get("domain"))
 	cert := configSetting(c, "certificatearn", "certificateArn")
 	zone := configSetting(c, "zoneid", "zoneId")
-	if err := validateSiteSettings(domain, cert, zone, identity.AccountId); err != nil {
+	provider := dnsProvider(c.Get("dnsprovider"))
+	if err := validateSiteSettings(domain, cert, zone, identity.AccountId, provider); err != nil {
 		return err
 	}
 	archive := c.Get("archive")
@@ -163,8 +165,17 @@ func run(ctx *pulumi.Context) error {
 	if _, err = s3.NewBucketPolicy(ctx, "web-policy", &s3.BucketPolicyArgs{Bucket: web.ID(), Policy: wp}); err != nil {
 		return err
 	}
-	if domain != "" && zone != "" {
+	if domain != "" && zone != "" && provider == "route53" {
 		if _, err = route53.NewRecord(ctx, "site-dns", &route53.RecordArgs{ZoneId: pulumi.String(zone), Name: pulumi.String(domain), Type: pulumi.String("A"), Aliases: route53.RecordAliasArray{&route53.RecordAliasArgs{Name: dist.DomainName, ZoneId: dist.HostedZoneId, EvaluateTargetHealth: pulumi.Bool(false)}}}); err != nil {
+			return err
+		}
+	}
+	if domain != "" && zone != "" && provider == "cloudflare" {
+		if _, err = cloudflare.NewDnsRecord(ctx, "site-dns", &cloudflare.DnsRecordArgs{
+			ZoneId: pulumi.String(zone), Name: pulumi.String(domain),
+			Type: pulumi.String("CNAME"), Content: dist.DomainName,
+			Ttl: pulumi.Float64(300), Proxied: pulumi.Bool(false),
+		}); err != nil {
 			return err
 		}
 	}
