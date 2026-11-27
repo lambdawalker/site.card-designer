@@ -15,12 +15,14 @@ import (
 type cloudMocks struct {
 	sync.Mutex
 	inputs map[string]resource.PropertyMap
+	types  map[string]string
 }
 
 func (m *cloudMocks) NewResource(a pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
 	m.Lock()
 	defer m.Unlock()
 	m.inputs[a.Name] = a.Inputs
+	m.types[a.Name] = a.TypeToken
 	out := a.Inputs.Copy()
 	for k, v := range map[string]string{"arn": "arn:aws:mock::123456789012:" + a.Name, "name": a.Name, "bucket": a.Name, "domainName": "example.cloudfront.net", "bucketRegionalDomainName": "example.s3.amazonaws.com", "apiEndpoint": "https://example.execute-api.us-east-1.amazonaws.com", "executionArn": "arn:aws:execute-api:us-east-1:123456789012:example", "invokeArn": "arn:aws:lambda:us-east-1:123456789012:function:example", "hostedZoneId": "ZTEST"} {
 		if _, ok := out[resource.PropertyKey(k)]; !ok {
@@ -36,6 +38,11 @@ func (m *cloudMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	return resource.NewPropertyMapFromMap(map[string]interface{}{"accountId": "123456789012", "arn": "arn:aws:iam::123456789012:role/test", "userId": "test"}), nil
 }
 func TestInfrastructureAuthAndCacheContracts(t *testing.T) {
+	runMockInfrastructure(t, nil)
+}
+
+func runMockInfrastructure(t *testing.T, extraConfig map[string]string) *cloudMocks {
+	t.Helper()
 	dir := t.TempDir()
 	for _, p := range []string{"infra", "backend", "web/dist", "dist/deploy"} {
 		if e := os.MkdirAll(filepath.Join(dir, p), 0700); e != nil {
@@ -53,9 +60,12 @@ func TestInfrastructureAuthAndCacheContracts(t *testing.T) {
 	f.Close()
 	os.WriteFile(filepath.Join(dir, "web/dist/index.html"), []byte("test"), 0600)
 	t.Chdir(filepath.Join(dir, "infra"))
-	m := &cloudMocks{inputs: map[string]resource.PropertyMap{}}
+	m := &cloudMocks{inputs: map[string]resource.PropertyMap{}, types: map[string]string{}}
 	e = pulumi.RunErr(run, pulumi.WithMocks("card-designer", "test", m), func(i *pulumi.RunInfo) {
 		i.Config = map[string]string{"card-designer:deploymentProject": "designer", "card-designer:deploymentEnvironment": "test", "card-designer:archive": "../dist/deploy/lambda.zip", "card-designer:domain": "none", "card-designer:certificatearn": "none", "card-designer:zoneid": "none"}
+		for key, value := range extraConfig {
+			i.Config["card-designer:"+key] = value
+		}
 	})
 	if e != nil {
 		t.Fatal(e)
@@ -108,5 +118,48 @@ func TestInfrastructureAuthAndCacheContracts(t *testing.T) {
 		if env[key].StringValue() == "" {
 			t.Fatalf("missing runtime config %s", key)
 		}
+	}
+	return m
+}
+
+func TestDNSRecords(t *testing.T) {
+	for _, tc := range []struct{ name, provider, zone, domain, typ string }{
+		{name: "generated"},
+		{name: "generated-cloudflare", provider: "cloudflare"},
+		{"legacy-route53", "", "ZABC123", "cards.example.com", "aws:route53/record:Record"},
+		{"route53", "route53", "ZABC123", "cards.example.com", "aws:route53/record:Record"},
+		{"cloudflare", "cloudflare", "023e105f4ecef8ad9ca31a8372d0c353", "cards.example.com", "cloudflare:index/dnsRecord:DnsRecord"},
+		{name: "manual-cloudflare", provider: "cloudflare", domain: "cards.example.com"},
+		{name: "manual-route53", provider: "route53", domain: "cards.example.com"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := map[string]string{"dnsprovider": tc.provider}
+			if tc.domain != "" {
+				cfg["domain"] = tc.domain
+				cfg["certificatearn"] = "arn:aws:acm:us-east-1:123456789012:certificate/abc-123"
+				cfg["zoneid"] = tc.zone
+			}
+			if tc.name == "legacy-route53" {
+				cfg["zoneid"], cfg["zoneId"] = "", tc.zone
+			}
+			m := runMockInfrastructure(t, cfg)
+			if m.types["site-dns"] != tc.typ {
+				t.Fatalf("DNS type = %q, want %q", m.types["site-dns"], tc.typ)
+			}
+			if tc.typ == "" {
+				return
+			}
+			dns := m.inputs["site-dns"]
+			if dns["name"].StringValue() != tc.domain || dns["zoneId"].StringValue() != tc.zone {
+				t.Fatal("DNS target mismatch", dns)
+			}
+			if tc.provider == "cloudflare" {
+				if dns["type"].StringValue() != "CNAME" || dns["content"].StringValue() != "example.cloudfront.net" || dns["proxied"].BoolValue() || dns["ttl"].NumberValue() != 300 {
+					t.Fatal("Cloudflare must point DNS-only to CloudFront", dns)
+				}
+			} else if dns["type"].StringValue() != "A" || dns["aliases"].ArrayValue()[0].ObjectValue()["name"].StringValue() != "example.cloudfront.net" {
+				t.Fatal("Route 53 alias changed", dns)
+			}
+		})
 	}
 }

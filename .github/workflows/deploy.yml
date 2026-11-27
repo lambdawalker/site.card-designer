@@ -60,10 +60,19 @@ jobs:
           DOMAIN: ${{ vars.BENCH_DOMAIN }}
           CERTIFICATE: ${{ vars.BENCH_CERTIFICATE_ARN }}
           ZONE: ${{ vars.BENCH_ZONE_ID }}
+          DNS_PROVIDER: ${{ vars.BENCH_DNS_PROVIDER || 'route53' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           for key in DOMAIN CERTIFICATE ZONE; do
             test -n "${!key}" || { echo "Missing $key; use explicit none when inapplicable"; exit 1; }
           done
           approval=()
+          case "$DNS_PROVIDER" in
+            route53|cloudflare) ;;
+            *) echo "DNS_PROVIDER must be route53 or cloudflare"; exit 1 ;;
+          esac
+          if [[ "$DNS_PROVIDER" == cloudflare && "$DOMAIN" != none && "$ZONE" != none ]]; then
+            test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN secret"; exit 1; }
+          fi
           if [[ "$ACTION" == deploy ]]; then approval+=(--approve); fi
-          ./deploy.sh --action "$ACTION" --non-interactive "${approval[@]}" --project "$DEPLOY_PROJECT" --environment "$ENVIRONMENT" --account "$AWS_ACCOUNT" --region "$AWS_REGION" --backend "$DEPLOY_STATE" --domain "$DOMAIN" --certificatearn "$CERTIFICATE" --zoneid "$ZONE"
+          ./deploy.sh --action "$ACTION" --non-interactive "${approval[@]}" --project "$DEPLOY_PROJECT" --environment "$ENVIRONMENT" --account "$AWS_ACCOUNT" --region "$AWS_REGION" --backend "$DEPLOY_STATE" --domain "$DOMAIN" --certificatearn "$CERTIFICATE" --zoneid "$ZONE" --dnsprovider "$DNS_PROVIDER"
