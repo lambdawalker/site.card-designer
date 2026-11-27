@@ -13,9 +13,10 @@ Plan:
 3. Preserve legacy settings/state with explicit migration guidance and guards;
    run local builds, tests and workflow checks; deliver linked PRs.
 
-The shared CLI currently lacks a nested build directory and prepared-asset hook.
-The extension will run a declared repository Go package without a shell, cache
-its declared input/output contents, and bind those outputs to preview approval.
+At the start of the migration, the shared CLI lacked a nested build directory and
+prepared-asset hook. The extension now runs a declared repository Go package
+without a shell, caches its declared input/output contents, and binds those
+outputs to preview approval.
 No application authentication or infrastructure topology redesign is planned.
 
 Requirement/evidence matrix is completed with the implementation below.
@@ -23,10 +24,11 @@ Requirement/evidence matrix is completed with the implementation below.
 ## Implementation and evidence
 
 The shared extension is [Composer PR #50](https://github.com/lambdawalker/go.infra.composer/pull/50).
-The consumer pins commit `32d1abf8d9b0220b72fcf4bc388999156f427fcf`
-through the checksummed Go pseudo-version in `deploy/go.mod`. This is a reviewed
-commit dependency, not a claimed stable release. Merge the shared prerequisite
-before the consumer; no merge/deployment is included in implementation delivery.
+The initial consumer migration pinned commit
+`32d1abf8d9b0220b72fcf4bc388999156f427fcf` through a checksummed Go pseudo-version.
+Composer PR #50 and Card Designer PR #2 were subsequently merged, followed by
+browser vault setup in Composer #51 and Card Designer #3. See the upgrade record
+below for the current dependency; commit pins are not claimed stable releases.
 
 | Requirement ID and source section | Role/target | Status | Implementation reference | Validation evidence | Remaining work |
 | --- | --- | --- | --- | --- | --- |
@@ -65,3 +67,41 @@ and `RefreshBeforePreview`. Existing email/OCR manifests retain their original
 defaults. Both real consumer Lambda builds and cache reuse passed with the
 candidate CLI; core and Pulumi modules are unchanged. See Composer
 `deploycli/docs/consumer-compatibility.md` for inspected revisions and limits.
+
+## Composer workspace upgrade 2026-11-27
+
+`deploy/go.mod` now pins the shared CLI at
+`v0.0.0-20261127172311-ff065d4b853c` (Composer main after PR #98).
+Its reporting dependency is the upstream-selected
+`v0.0.0-20261127172010-c983d95dd87b`. Both are verified by `deploy/go.sum`;
+there are no local replacements or floating dependencies.
+
+This brings environment tabs, deployment history, drift checks, resource change
+and dependency inspection, the multi-level 3D topology and self-contained HTML
+reports into the existing launchers. First-run browser vault password creation
+and confirmation remain available. `ArtifactAttachments` supplies six exact-name
+presentation hints for older inventories missing dependency information.
+`deploy/topology_test.go` checks those hints against the pinned Composer resolver
+and exported HTML report; consumer-specific compatibility stays in this repo.
+
+The manifest remains version 1. No launcher or workflow changes are required:
+both platforms and Actions already compile the tool from `deploy/go.mod`.
+Infrastructure source, resource names, stack identity, vault migration, approval
+binding, refreshed previews and readiness checks are unchanged. No changes to
+Composer or its other consumers are required by this upgrade.
+
+Local verification:
+
+- All three application Go modules: race tests and vet.
+- Pinned Composer CLI, browser wizard and reporting packages: race tests.
+- Normal launcher help/build from outside the checkout; repeated build reuses
+  verified prepared assets and the Lambda archive.
+- Chromium smoke test of the normal browser launcher: workspace loads without
+  JavaScript errors and first-run vault creation advances to password confirmation.
+  The session stops before saving credentials or contacting AWS.
+- Drawing tools: TypeScript check and 7 tests; website: 17 tests and production
+  build. Existing Svelte accessibility and bundle-size advisories remain.
+
+Native Windows launcher verification also runs in the PR's existing CI matrix.
+AWS preview, apply, drift and live readiness were not run; local validation does
+not establish that an existing deployment is healthy or ready to apply.

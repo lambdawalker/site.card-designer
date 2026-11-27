@@ -114,6 +114,14 @@
     "EnvironmentPrefix": "",
     "Prompt": true
   },
+  "ArtifactAttachments": {
+    "api-permissions": "api-role",
+    "gateway": "handler",
+    "lambda": "api",
+    "api-routes": "api",
+    "live": "api",
+    "browser": "users"
+  },
   "ArtifactDescriptions": {
     "web": "Stores the website files behind CloudFront origin access control.",
     "data": "Stores private user designs and immutable portrait package cache.",

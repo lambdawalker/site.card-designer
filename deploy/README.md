@@ -43,6 +43,35 @@ or discovery stack. `dev`, `qa`, `prod` and validated custom environments are
 supported. Production support is explicitly enabled in this application's
 manifest; isolated Composer test hosts retain their production restriction.
 
+## Browser workspace and reports
+
+The browser workspace includes environment tabs, deployment history, before/after
+resource details, relationship inspection and a multi-level 3D topology. Use
+**New Environment** or **Open Environment** in the main menu to select the target;
+switch tabs between operations. Creating a draft does not provision resources.
+Saved inventories are shown as unchecked until Composer reads the selected stack.
+
+The topology supports branch focus/collapse, framing, dependency inspection,
+change filters and per-artifact icon settings. Card Designer declares attachment
+hints for its API integration/routes/stage, Cognito client and IAM/Lambda
+permissions so older inventories without dependency evidence can also display
+those relationships. Hints affect presentation only; they do not reparent Pulumi
+resources or change stack identity. This application has no reusable Pulumi root
+component to declare through `LegacyComponentNames`.
+
+Use **Check drift**, or `./deploy.sh --action drift --environment dev`, to preview
+a refresh of an existing stack without applying changes. Overview distinguishes
+the latest successful deployment, failed attempt and drift results. Cached
+inventory and recorded deployment success are not proof of current AWS health.
+
+HTML artifact reports use the same topology and inspection workspace in a
+self-contained file, including embedded artwork. Reports can be opened offline;
+deployment actions, credentials and live AWS checks remain in the running wizard.
+Generate a report with `./deploy.sh --action report --environment dev`, or download
+a recorded report from Overview. Review reports before sharing their resource
+metadata. The current dependency upgrade is recorded in the
+[Composer migration notes](../docs/deployment/composer-migration.md#composer-workspace-upgrade-2026-11-27).
+
 ## Hostname and ownership
 
 Supply the **full website hostname**, for example `cards.example.com`; it is not

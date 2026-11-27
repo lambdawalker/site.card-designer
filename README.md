@@ -39,7 +39,8 @@ Both launchers run the same pinned Infra Composer deployment CLI, with a small
 local adapter for asset preparation and legacy record migration. The wizard collects the domain
 at deployment time and keeps settings scoped to the selected project/environment.
 Build and refreshed preview precede saved-plan approval and apply.
-Use `./deploy.sh --server` for the shared browser wizard, or
+Use `./deploy.sh --server` for the shared browser workspace with environment tabs,
+deployment history, drift checks and the interactive 3D resource topology, or
 `./deploy.sh --action build` to build without cloud access. AWS credentials belong to the operator's SSO
 profile locally and an assumed OIDC role in CI. Never commit credentials, the
 local vault or Pulumi state.
