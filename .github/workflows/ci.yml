@@ -17,13 +17,6 @@ jobs:
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache-dependency-path: ${{ matrix.module }}/go.sum
-      - name: Resolve provider dependencies
-        if: matrix.module == 'infra'
-        working-directory: infra
-        run: |
-          go mod tidy
-          gofmt -w *.go
-          python -c 'import json,pathlib; print("CARD_DNS_FILES="+json.dumps({str(p):p.read_text() for p in [pathlib.Path("go.mod"),pathlib.Path("go.sum"),*pathlib.Path(".").glob("*.go")]}))'
       - name: Tests and vet
         working-directory: ${{ matrix.module }}
         run: |

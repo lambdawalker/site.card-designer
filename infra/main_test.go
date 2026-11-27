@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,10 @@ func (m *cloudMocks) Call(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
 	}
 	return resource.NewPropertyMapFromMap(map[string]interface{}{"accountId": "123456789012", "arn": "arn:aws:iam::123456789012:role/test", "userId": "test"}), nil
 }
+func (m *cloudMocks) MethodCall(a pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	return nil, fmt.Errorf("unexpected resource method call: %s", a.Token)
+}
+
 func TestInfrastructureAuthAndCacheContracts(t *testing.T) {
 	runMockInfrastructure(t, nil)
 }
